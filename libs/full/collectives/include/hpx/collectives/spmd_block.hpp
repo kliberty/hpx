@@ -12,6 +12,7 @@
 #include <hpx/async_base/launch_policy.hpp>
 #include <hpx/collectives/barrier.hpp>
 #include <hpx/collectives/broadcast_direct.hpp>
+#include <hpx/components_base/agas_interface.hpp>
 #include <hpx/concepts/concepts.hpp>
 #include <hpx/execution/execution.hpp>
 #include <hpx/functional/first_argument.hpp>
@@ -19,7 +20,7 @@
 #include <hpx/futures/future.hpp>
 #include <hpx/hashing/jenkins_hash.hpp>
 #include <hpx/iterator_support/traits/is_iterator.hpp>
-#include <hpx/runtime_local/get_locality_id.hpp>
+#include <hpx/naming_base/id_type.hpp>
 #include <hpx/serialization/serialize.hpp>
 #include <hpx/type_support/pack.hpp>
 
@@ -261,8 +262,9 @@ namespace hpx { namespace lcos {
                     name_, images_per_locality_, num_images_, image_id);
 
                 F()
-                (hpx::launch::sync, hpx::find_here(), std::move(block),
-                    std::forward<Ts>(ts)...);
+                (hpx::launch::sync,
+                    naming::get_id_from_locality_id(agas::get_locality_id()),
+                    std::move(block), std::forward<Ts>(ts)...);
             }
         };
 
@@ -277,7 +279,7 @@ namespace hpx { namespace lcos {
 
                 executor_type exec;
                 std::size_t offset =
-                    static_cast<std::size_t>(hpx::get_locality_id());
+                    static_cast<std::size_t>(agas::get_locality_id());
                 offset *= images_per_locality;
 
                 hpx::parallel::execution::bulk_sync_execute(exec,
@@ -310,7 +312,16 @@ namespace hpx { namespace lcos {
                 hpx::get_num_localities(hpx::launch::sync)) *
             images_per_locality;
 
-        return hpx::lcos::broadcast(act, hpx::find_all_localities(),
+        std::vector<std::uint32_t> ids = agas::get_all_locality_ids();
+
+        std::vector<hpx::id_type> localities;
+        localities.reserve(ids.size());
+        for (auto id : ids)
+        {
+            localities.push_back(naming::get_id_from_locality_id(id));
+        }
+
+        return hpx::lcos::broadcast(act, localities,
             std::forward<std::string>(name), images_per_locality, num_images,
             std::forward<Args>(args)...);
     }
